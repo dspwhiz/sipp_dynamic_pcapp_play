@@ -1,0 +1,90 @@
+diff -Nur sipp-3.3dyn/sipp-3.3/send_packets.c sipp-3.3/send_packets.c
+--- sipp-3.3dyn/sipp-3.3/send_packets.c	2013-08-19 14:43:06.000000000 +0530
++++ sipp-3.3/send_packets.c	2013-08-21 14:21:57.180001000 +0530
+@@ -62,6 +62,7 @@
+ 
+ extern volatile unsigned long pcap_data_played;
+ extern volatile unsigned long pcap_timestamp_shift;
++extern volatile unsigned long pcap_ssrc_iden;
+ extern volatile unsigned long rtp_pckts_pcap;
+ extern volatile unsigned long rtp_bytes_pcap;
+ extern int media_ip_is_ipv6;
+@@ -193,6 +194,7 @@
+   unsigned short int pcap_seq_num_diff = 0;
+   int tstamp = 0;
+   unsigned short int pcap_total_duration = 0;
++  unsigned long pcap_current_ssrc = 0;
+   if (dynamic_play) {
+     // Calculate the timestamp to be used in the current PCAP file
+     tstamp = pcap_timestamp_shift + PCAP_TIMESTAMP_SHIFT; 
+@@ -205,6 +207,10 @@
+ 
+       // Retrieve the original sequence number (hexadecimal) from the PCAP data
+       unsigned char seq_num_hex[2];
++     //soumit
++      unsigned char ssrc_num_hex[4];
++      
++
+       seq_num_hex[0] = (unsigned char) buffer[10];
+       seq_num_hex[1] = (unsigned char) buffer[11];
+ 
+@@ -214,8 +220,33 @@
+       timestamp_hex[1] = (unsigned char) buffer[13];
+       timestamp_hex[2] = (unsigned char) buffer[14];
+       timestamp_hex[3] = (unsigned char) buffer[15];
++      
++
++      ssrc_num_hex[0] = (unsigned char) buffer[16];
++      ssrc_num_hex[1] = (unsigned char) buffer[17];
++      ssrc_num_hex[2] = (unsigned char) buffer[18];
++      ssrc_num_hex[3] = (unsigned char) buffer[19];
++
++      pcap_current_ssrc =   ssrc_num_hex[0] << 24 ;
++      pcap_current_ssrc |=   ssrc_num_hex[1] << 16;
++      pcap_current_ssrc |=   ssrc_num_hex[2] << 8 ;
++      pcap_current_ssrc |=  ssrc_num_hex[3]; 
++//	        TRACE_MSG(" pcap curren ssrc before %d and iden %d ",pcap_current_ssrc,pcap_ssrc_iden);
++      if (0 == pcap_ssrc_iden) 
++	{
++		// assign the first pcap_current_ssrc 
++		pcap_ssrc_iden = pcap_current_ssrc;
++//	        TRACE_MSG(" pcap curren ssrc iden 1 %d ",pcap_ssrc_iden);
++	}
++      if (pcap_current_ssrc != pcap_ssrc_iden )
++	{
++		pcap_current_ssrc = pcap_ssrc_iden;
++//	        TRACE_MSG(" pcap curren ssrc assigned iden  2 %d ",pcap_current_ssrc);
++	}
+ 
+-      // Check if the sequence number has changed
++
++
++	// Check if the sequence number has changed
+       if (last_pcap_seq_num[0] != seq_num_hex[0] ||
+           last_pcap_seq_num[1] != seq_num_hex[1]) {
+ 
+@@ -244,6 +275,13 @@
+       buffer[14] = ((tstamp & 0x0000ff00) >> 8);
+       buffer[15] = ((tstamp & 0x000000ff));
+ 
++ 	// Store the calculated timestamp into the PCAP data
++      buffer[16] = ((pcap_current_ssrc & 0xff000000) >> 24);
++      buffer[17] = ((pcap_current_ssrc & 0x00ff0000) >> 16);
++      buffer[18] = ((pcap_current_ssrc & 0x0000ff00) >> 8);
++      buffer[19] = ((pcap_current_ssrc & 0x000000ff));
++
++
+       // Recalc the partial checksum due to the changes on the Sequence Number
+       udp->uh_sum = 0 ;
+       pkt_index->partial_check = 
+diff -Nur sipp-3.3dyn/sipp-3.3/sipp.hpp sipp-3.3/sipp.hpp
+--- sipp-3.3dyn/sipp-3.3/sipp.hpp	2013-08-19 14:43:06.000000000 +0530
++++ sipp-3.3/sipp.hpp	2013-08-21 11:42:42.330001000 +0530
+@@ -365,6 +365,7 @@
+ extern unsigned long rtp_bytes                    _DEFVAL(0);
+ extern unsigned long pcap_data_played             _DEFVAL(0);
+ extern unsigned long pcap_timestamp_shift         _DEFVAL(0);
++extern unsigned long pcap_ssrc_iden	          _DEFVAL(0);
+ extern unsigned long rtp_pckts_pcap               _DEFVAL(0);
+ extern unsigned long rtp_bytes_pcap               _DEFVAL(0);
+ extern unsigned long rtp2_pckts                   _DEFVAL(0);
